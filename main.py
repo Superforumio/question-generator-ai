@@ -2,10 +2,11 @@ from typing import Union
 from fastapi import FastAPI, HTTPException
 from firecrawl import FirecrawlApp
 import os
+import logging
 from dotenv import load_dotenv
 from pydantic import BaseModel
-import logging
 from openai import OpenAI
+import re
 
 load_dotenv()
 
@@ -19,10 +20,9 @@ if not openai_api_key:
     raise ValueError("OPENAI_API_KEY is not set in the .env file")
 
 firecrawl_app = FirecrawlApp(api_key=firecrawl_api_key)
-openai.api_key = openai_api_key
 
 # Initialize the OpenAI client
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+client = OpenAI(api_key=openai_api_key)
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -79,7 +79,15 @@ async def generate_qa(url: str):
             if i + 1 < len(message_content):
                 question = message_content[i].strip()
                 answer = message_content[i + 1].strip()
-                qa_pairs.append(QAPair(question=question, answer=answer))
+                # Remove numbering and asterisks from questions
+                question = re.sub(r"^\d+\.\s*\*{0,2}", "", question).strip()
+                answer = re.sub(r"^\d+\.\s*\*{0,2}", "", answer).strip()
+                # Swap question and answer if they're in the wrong order
+                if not question and answer:
+                    question, answer = answer, question
+                # Only add pairs where both question and answer are non-empty
+                if question and answer:
+                    qa_pairs.append(QAPair(question=question, answer=answer))
 
         logger.info(f"Generated {len(qa_pairs)} Q&A pairs")
         return qa_pairs
